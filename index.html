@@ -78,7 +78,6 @@
             align-items: center; 
             justify-content: center; 
             pointer-events: none; 
-            /* Top-right to Bottom-left Circle Clip Animation */
             clip-path: circle(0% at 95% 5%);
             transition: clip-path 0.7s cubic-bezier(0.77, 0, 0.175, 1);
         }
@@ -107,7 +106,6 @@
             border: 1px solid rgba(255,255,255,0.1);
         }
 
-        /* Loading */
         #loading { position: fixed; inset: 0; background: #050505; display: flex; align-items: center; justify-content: center; z-index: 1000; flex-direction: column; }
         .spinner { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid var(--accent-color); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -119,18 +117,21 @@
             --accent-glow: rgba(255,182,193,0.4);
             --accent-bg: rgba(255,182,193,0.15);
         }
+        .christmas-theme { --accent-color: #ff3e3e; --accent-bg: rgba(255,62,62,0.15); }
+        .newyear-theme { --accent-color: #ffd700; --accent-bg: rgba(255,215,0,0.15); }
     </style>
 </head>
 <body class="default-theme">
 
     <div id="loading">
         <div class="spinner"></div>
-        <p class="text-white/50 tracking-widest text-xs uppercase">Initializing Gallery...</p>
+        <p id="loading-text" class="text-white/50 tracking-widest text-xs uppercase">Initializing Gallery...</p>
     </div>
 
     <!-- Header Title -->
     <div class="absolute top-6 left-6 z-20 pointer-events-none">
         <h1 id="gallery-title" class="text-xl md:text-2xl font-extralight tracking-[0.2em] text-white opacity-60">YOUR GALLERY</h1>
+        <p id="holiday-badge" class="text-[10px] tracking-[0.3em] text-white/40 uppercase mt-1"></p>
     </div>
 
     <!-- Top Right Menu Button -->
@@ -138,7 +139,7 @@
         <span id="menu-icon">❔</span>
     </button>
 
-    <!-- Instructions Overlay (Animation UI) -->
+    <!-- Instructions Overlay -->
     <div id="instructions-overlay">
         <div class="instruction-card">
             <h2 class="text-2xl mb-6 font-light tracking-widest">HAND GESTURES</h2>
@@ -162,13 +163,40 @@
         <input type="file" id="image-upload" multiple accept="image/*">
     </div>
 
-    <!-- Camera Feed -->
     <div id="video-container">
         <video id="input_video"></video>
     </div>
 
     <script>
-        // UI Logic
+        // --- Theme Logic ---
+        const now = new Date();
+        const month = now.getMonth() + 1; 
+        const date = now.getDate();
+        
+        let themeType = "default";
+        if (month === 12 && date >= 24 && date <= 26) themeType = "christmas";
+        else if ((month === 12 && date >= 31) || (month === 1 && date <= 2)) themeType = "newyear";
+
+        const galleryTitle = document.getElementById('gallery-title');
+        const holidayBadge = document.getElementById('holiday-badge');
+        let accentHex = 0xffb6c1;
+        let confettiColors = [0xffb6c1, 0xffffff, 0xffd1dc];
+
+        if (themeType === "christmas") {
+            document.body.classList.add('christmas-theme');
+            galleryTitle.innerHTML = "🎅 MERRY <span class='text-red-500'>CHRISTMAS</span> 🎄";
+            holidayBadge.innerText = "✨ Christmas Edition 🎁";
+            accentHex = 0xff3e3e;
+            confettiColors = [0xff3e3e, 0x2e8b57, 0xffffff];
+        } else if (themeType === "newyear") {
+            document.body.classList.add('newyear-theme');
+            galleryTitle.innerHTML = "✨ HAPPY <span class='text-yellow-400'>NEW YEAR</span> 🎆";
+            holidayBadge.innerText = "🥂 New Year Edition 🎇";
+            accentHex = 0xffd700;
+            confettiColors = [0xffd700, 0xffffff, 0xc0c0c0];
+        }
+
+        // --- UI Logic ---
         const menuBtn = document.getElementById('menu-toggle');
         const overlay = document.getElementById('instructions-overlay');
         const closeBtn = document.getElementById('close-menu');
@@ -184,19 +212,19 @@
             menuIcon.innerText = '❔';
         });
 
-        // Hide main text elements logic
         const uiToggle = document.getElementById('ui-visibility-btn');
         let uiLabelsHidden = false;
         uiToggle.addEventListener('click', () => {
             uiLabelsHidden = !uiLabelsHidden;
-            document.getElementById('gallery-title').style.opacity = uiLabelsHidden ? '0' : '0.6';
+            galleryTitle.style.opacity = uiLabelsHidden ? '0' : '0.6';
+            holidayBadge.style.opacity = uiLabelsHidden ? '0' : '0.4';
             uiToggle.style.opacity = uiLabelsHidden ? '0.4' : '1';
         });
 
-        // --- Three.js & Hand Tracking Core Logic (Modified for new UI) ---
-        
+        // --- Three.js & Hand Tracking ---
         const RADIUS = 20;
         let scene, camera, renderer, galleryGroup, particles;
+        let emojiSprites = []; 
         let images = [];
         let currentImageCount = 0;
         let targetRotation = 0, currentRotation = 0;
@@ -205,7 +233,15 @@
         let focusRotationY = 0, focusScale = 1;
         let lastHandPos = null, gestureCooldown = 0;
         let isFistActive = false;
-        let accentHex = 0xffb6c1;
+
+        function createEmojiTexture(emoji) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.font = '100px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(emoji, 64, 64);
+            return new THREE.CanvasTexture(canvas);
+        }
 
         function initThree() {
             scene = new THREE.Scene();
@@ -227,13 +263,27 @@
             galleryGroup = new THREE.Group();
             scene.add(galleryGroup);
 
-            // Background particles
-            const pGeo = new THREE.BufferGeometry();
-            const pPos = new Float32Array(1000 * 3);
-            for(let i=0; i<1000*3; i++) pPos[i] = (Math.random() - 0.5) * 150;
-            pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-            particles = new THREE.Points(pGeo, new THREE.PointsMaterial({ color: accentHex, size: 0.05, transparent: true, opacity: 0.3 }));
-            scene.add(particles);
+            // Falling Sprites / Background Particles
+            if (themeType !== "default") {
+                const holidayEmojis = themeType === "christmas" ? ['🎄', '🎁', '✨', '❄️'] : ['🎆', '🎇', '✨', '🥂'];
+                const textures = holidayEmojis.map(e => createEmojiTexture(e));
+                for (let i = 0; i < 80; i++) {
+                    const material = new THREE.SpriteMaterial({ map: textures[i % textures.length], transparent: true, opacity: 0.8 });
+                    const sprite = new THREE.Sprite(material);
+                    sprite.position.set((Math.random()-0.5)*120, Math.random()*100-50, (Math.random()-0.5)*100);
+                    sprite.scale.set(1.5, 1.5, 1);
+                    sprite.userData = { velocity: 0.05 + Math.random()*0.1, drift: (Math.random()-0.5)*0.02 };
+                    scene.add(sprite);
+                    emojiSprites.push(sprite);
+                }
+            } else {
+                const pGeo = new THREE.BufferGeometry();
+                const pPos = new Float32Array(1000 * 3);
+                for(let i=0; i<1000*3; i++) pPos[i] = (Math.random() - 0.5) * 150;
+                pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+                particles = new THREE.Points(pGeo, new THREE.PointsMaterial({ color: accentHex, size: 0.05, transparent: true, opacity: 0.3 }));
+                scene.add(particles);
+            }
 
             window.addEventListener('resize', () => {
                 camera.aspect = window.innerWidth / window.innerHeight;
@@ -249,7 +299,7 @@
             const list = [];
             for (let i = 0; i < count; i++) {
                 const geo = new THREE.PlaneGeometry(0.8, 0.8);
-                const mat = new THREE.MeshStandardMaterial({ color: color, side: THREE.DoubleSide, transparent: true, opacity: 0 });
+                const mat = new THREE.MeshStandardMaterial({ color: confettiColors[i % confettiColors.length], side: THREE.DoubleSide, transparent: true, opacity: 0 });
                 const mesh = new THREE.Mesh(geo, mat);
                 mesh.position.set((Math.random()-0.5)*8, (Math.random()-0.5)*10, 0);
                 group.add(mesh);
@@ -377,7 +427,18 @@
                     }
                 });
             }
-            if (particles) particles.rotation.y += 0.0003;
+
+            // Animate Falling Emojis
+            if (themeType !== "default") {
+                emojiSprites.forEach(sprite => {
+                    sprite.position.y -= sprite.userData.velocity;
+                    sprite.position.x += Math.sin(time + sprite.position.y) * sprite.userData.drift;
+                    if (sprite.position.y < -50) sprite.position.y = 50;
+                });
+            } else if (particles) {
+                particles.rotation.y += 0.0003;
+            }
+
             renderer.render(scene, camera);
         }
 
