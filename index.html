@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your 3D Gallery - Dynamic Upload</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #050505; font-family: 'Pyidaungsu', sans-serif; }
+        #video-container { position: absolute; bottom: 20px; right: 20px; width: 180px; height: 135px; border-radius: 12px; overflow: hidden; border: 2px solid rgba(255,182,193,0.3); z-index: 10; transform: scaleX(-1); }
+        #input_video { width: 100%; height: 100%; object-fit: cover; }
+        #ui-overlay { position: absolute; top: 20px; left: 20px; color: white; z-index: 5; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .gesture-badge { background: rgba(0,0,0,0.4); padding: 10px 18px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(8px); margin-bottom: 12px; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); font-size: 0.9rem; width: fit-content; pointer-events: none; }
+        .active-gesture { border-color: #ffb6c1; box-shadow: 0 0 20px rgba(255,182,193,0.4); background: rgba(255,182,193,0.15); transform: translateX(10px); color: #ffb6c1; }
+        #loading { position: fixed; inset: 0; background: radial-gradient(circle, #1a1a1a 0%, #000 100%); display: flex; align-items: center; justify-content: center; color: #ffb6c1; z-index: 100; flex-direction: column; }
+        .spinner { border: 3px solid rgba(255,182,193,0.1); border-top: 3px solid #ffb6c1; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 25px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #instruction-container { transition: opacity 0.5s ease, transform 0.5s ease; }
+        .ui-hidden { opacity: 0; transform: translateX(-20px); pointer-events: none; }
+        .action-btn { pointer-events: auto; cursor: pointer; background: rgba(255,182,193,0.2); border: 1px solid rgba(255,182,193,0.4); padding: 8px 20px; border-radius: 20px; font-size: 0.85rem; margin-bottom: 15px; transition: all 0.3s; color: #fff; display: flex; align-items: center; gap: 10px; }
+        .action-btn:hover { background: rgba(255,182,193,0.4); transform: translateY(-2px); }
+        input[type="file"] { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="loading">
+        <div class="spinner"></div>
+        <p class="tracking-widest">စနစ်ကို ပြင်ဆင်နေသည်...</p>
+    </div>
+
+    <div id="ui-overlay">
+        <h1 class="text-4xl font-extralight mb-6 tracking-[0.3em] text-pink-100 opacity-80">YOUR GALLERY</h1>
+        
+        <div class="flex flex-col gap-2 mb-8">
+            <button id="ui-toggle-btn" class="action-btn w-fit">👁️ UI ဖျောက်ရန်/ပြရန်</button>
+            
+            <!-- Image Selection Button -->
+            <label for="image-upload" class="action-btn w-fit">
+                🖼️ ပုံများ ရွေးချယ်ရန်
+            </label>
+            <input type="file" id="image-upload" multiple accept="image/*">
+        </div>
+
+        <div id="instruction-container">
+            <div id="badge-scroll" class="gesture-badge">👆 လက်ညှိးဝှေ့ယမ်း၍ ပုံများကို ရွှေ့ပါ</div>
+            <div id="badge-rotate" class="gesture-badge">✋ လက်ဝါးဖြန့်ကာ ဘယ်/ညာ ရွှေ့၍ လှည့်ပါ</div>
+            <div id="badge-select" class="gesture-badge">🤌 လက်ညှိးနှင့်လက်မထိ၍ ပုံကို ဆွဲထုတ်ပါ/ပြန်ထားပါ</div>
+            <div id="badge-zoom" class="gesture-badge">↕️ လက်ကို ရှေ့တိုး/နောက်ဆုတ်လုပ်၍ Zoom ဆွဲပါ</div>
+            <div class="mt-10 opacity-40 text-xs tracking-widest">SYSTEM READY | Dynamic Content Enabled</div>
+        </div>
+    </div>
+
+    <div id="video-container">
+        <video id="input_video"></video>
+    </div>
+
+    <script>
+        let uiVisible = true;
+        const toggleBtn = document.getElementById('ui-toggle-btn');
+        const container = document.getElementById('instruction-container');
+        const fileInput = document.getElementById('image-upload');
+
+        toggleBtn.addEventListener('click', () => {
+            uiVisible = !uiVisible;
+            container.classList.toggle('ui-hidden', !uiVisible);
+        });
+
+        // --- Configuration ---
+        let currentImageCount = 0;
+        const RADIUS = 20;
+        let scene, camera, renderer, galleryGroup, particles;
+        let images = [];
+        
+        let targetRotation = 0;
+        let currentRotation = 0;
+        let targetZoom = 40;
+        let currentZoom = 40;
+        
+        let isFocusMode = false;
+        let focusedIndex = -1;
+        let focusRotationY = 0;
+        let focusScale = 1;
+        
+        let lastHandPos = null;
+        let gestureCooldown = 0;
+
+        function initThree() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x050505, 0.02);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = currentZoom;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+            const pLight = new THREE.PointLight(0xffb6c1, 2, 100);
+            pLight.position.set(0, 20, 20);
+            scene.add(pLight);
+
+            galleryGroup = new THREE.Group();
+            scene.add(galleryGroup);
+
+            // Particles Background
+            const pGeo = new THREE.BufferGeometry();
+            const pPos = new Float32Array(3000 * 3);
+            for(let i=0; i<3000*3; i++) pPos[i] = (Math.random() - 0.5) * 200;
+            pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+            particles = new THREE.Points(pGeo, new THREE.PointsMaterial({ color: 0xffb6c1, size: 0.1, transparent: true, opacity: 0.5 }));
+            scene.add(particles);
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        // --- Build Gallery Function ---
+        function createGallery(urls) {
+            // Clear existing
+            while(galleryGroup.children.length > 0) galleryGroup.remove(galleryGroup.children[0]);
+            images = [];
+            currentImageCount = urls.length;
+
+            const loader = new THREE.TextureLoader();
+
+            urls.forEach((url, i) => {
+                const angle = (i / currentImageCount) * Math.PI * 2;
+                const geometry = new THREE.PlaneGeometry(8, 10);
+                
+                const texture = loader.load(url);
+                const material = new THREE.MeshStandardMaterial({ 
+                    map: texture, 
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    roughness: 0.3
+                });
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                const frame = new THREE.Group();
+                frame.add(mesh);
+                
+                const posX = Math.sin(angle) * RADIUS;
+                const posZ = Math.cos(angle) * RADIUS;
+                frame.position.set(posX, 0, posZ);
+                frame.lookAt(0, 0, 0);
+                
+                galleryGroup.add(frame);
+                images.push({ 
+                    group: frame, 
+                    mesh: mesh, 
+                    origPos: new THREE.Vector3(posX, 0, posZ),
+                    origRot: frame.rotation.clone()
+                });
+            });
+            
+            // Reset state
+            isFocusMode = false;
+            targetRotation = 0;
+            currentRotation = 0;
+        }
+
+        // File Input Handling
+        fileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length < 1) return;
+
+            const urls = [];
+            let loadedCount = 0;
+
+            files.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    urls.push(event.target.result);
+                    loadedCount++;
+                    if (loadedCount === files.length) {
+                        createGallery(urls);
+                    }
+                };
+                reader.readAsDataURL(file);
+            });
+        });
+
+        function onResults(results) {
+            document.getElementById('loading').style.display = 'none';
+            document.querySelectorAll('.gesture-badge').forEach(b => b.classList.remove('active-gesture'));
+            if (gestureCooldown > 0) gestureCooldown--;
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const hand = results.multiHandLandmarks[0];
+                const indexTip = hand[8];
+                const thumbTip = hand[4];
+                const handX = indexTip.x;
+
+                // Determine if hand is open
+                const fingerTips = [8, 12, 16, 20];
+                const palmBase = hand[0];
+                const isPalmOpen = fingerTips.every(id => Math.hypot(hand[id].x - palmBase.x, hand[id].y - palmBase.y) > 0.18);
+
+                // 1. Pinch Detection
+                const pinchDist = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
+                if (pinchDist < 0.04 && gestureCooldown === 0) {
+                    isFocusMode = !isFocusMode;
+                    if (isFocusMode) {
+                        focusedIndex = activeIndex;
+                        focusRotationY = 0;
+                        focusScale = 1.8;
+                    }
+                    gestureCooldown = 40;
+                    document.getElementById('badge-select').classList.add('active-gesture');
+                }
+
+                // Interaction Logic
+                const handSize = Math.hypot(hand[5].x - hand[17].x, hand[5].y - hand[17].y);
+
+                if (!isFocusMode) {
+                    if (lastHandPos) {
+                        const dx = handX - lastHandPos;
+                        
+                        if (isPalmOpen) {
+                            // Rotation gesture when palm is open
+                            targetRotation -= dx * 8;
+                            document.getElementById('badge-rotate').classList.add('active-gesture');
+                        } else {
+                            // Scroll gesture
+                            targetRotation -= dx * 12;
+                            document.getElementById('badge-scroll').classList.add('active-gesture');
+                        }
+                    }
+                    targetZoom = 55 - (handSize * 150);
+                    targetZoom = Math.min(Math.max(targetZoom, 20), 70);
+                    document.getElementById('badge-zoom').classList.add('active-gesture');
+                } else {
+                    // Focus Mode Rotation
+                    if (lastHandPos) {
+                        const dx = handX - lastHandPos;
+                        focusRotationY += dx * 5;
+                        if(Math.abs(dx) > 0.01) document.getElementById('badge-rotate').classList.add('active-gesture');
+                    }
+                    const newScale = handSize * 12; 
+                    focusScale = Math.min(Math.max(newScale, 0.5), 4);
+                    document.getElementById('badge-zoom').classList.add('active-gesture');
+                }
+                lastHandPos = handX;
+            } else {
+                lastHandPos = null;
+            }
+        }
+
+        let activeIndex = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = Date.now() * 0.001;
+
+            currentRotation += (targetRotation - currentRotation) * 0.1;
+            
+            if (!isFocusMode) {
+                galleryGroup.rotation.y = currentRotation;
+            }
+            
+            currentZoom += (targetZoom - currentZoom) * 0.08;
+            camera.position.z = currentZoom;
+
+            if (currentImageCount > 0) {
+                const normRot = ((currentRotation % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+                activeIndex = Math.round(((Math.PI * 2) - normRot) / (Math.PI * 2) * currentImageCount) % currentImageCount;
+
+                images.forEach((img, i) => {
+                    if (isFocusMode && i === focusedIndex) {
+                        const worldTarget = new THREE.Vector3(0, 0, currentZoom - 12);
+                        const localTarget = galleryGroup.worldToLocal(worldTarget.clone());
+
+                        img.group.position.lerp(localTarget, 0.1);
+                        img.group.rotation.y = -galleryGroup.rotation.y + focusRotationY;
+                        img.mesh.scale.lerp(new THREE.Vector3(focusScale, focusScale, 1), 0.1);
+                        img.mesh.material.opacity = 1.0;
+                    } else {
+                        img.group.position.lerp(img.origPos, 0.1);
+                        img.group.rotation.y += (img.origRot.y - img.group.rotation.y) * 0.1;
+                        img.group.position.y = Math.sin(time + i) * 0.3;
+                        img.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
+                        const targetOpacity = isFocusMode ? 0.1 : 1.0;
+                        img.mesh.material.opacity += (targetOpacity - img.mesh.material.opacity) * 0.1;
+                    }
+                });
+            }
+
+            particles.rotation.y += 0.0003;
+            renderer.render(scene, camera);
+        }
+
+        window.onload = () => {
+            initThree();
+            animate();
+
+            // Default images (Picsum for initial look)
+            const defaults = Array.from({length: 6}, (_, i) => `https://picsum.photos/seed/${i+50}/800/1000`);
+            createGallery(defaults);
+
+            const video = document.getElementById('input_video');
+            const hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.75,
+                minTrackingConfidence: 0.75
+            });
+
+            hands.onResults(onResults);
+
+            const cam = new Camera(video, {
+                onFrame: async () => { await hands.send({ image: video }); },
+                width: 640, height: 480
+            });
+            cam.start();
+        };
+    </script>
+</body>
+</html>
