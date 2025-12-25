@@ -3,45 +3,121 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YOUR 3D Gallery</title>
+    <title>ETHEREAL 3D GALLERY</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #050505; font-family: sans-serif; }
-        #video-container { position: absolute; bottom: 20px; right: 20px; width: 180px; height: 135px; border-radius: 12px; overflow: hidden; border: 2px solid rgba(255,255,255,0.2); z-index: 10; transform: scaleX(-1); }
+        body { margin: 0; overflow: hidden; background: #050505; font-family: 'Inter', sans-serif; }
+        
+        /* Camera Feed View */
+        #video-container { 
+            position: absolute; 
+            bottom: 20px; 
+            right: 20px; 
+            width: 120px; 
+            height: 90px; 
+            border-radius: 12px; 
+            overflow: hidden; 
+            border: 2px solid rgba(255,255,255,0.1); 
+            z-index: 10; 
+            transform: scaleX(-1);
+            transition: all 0.3s;
+        }
+        @media (min-width: 768px) { #video-container { width: 180px; height: 135px; } }
+
         #input_video { width: 100%; height: 100%; object-fit: cover; }
-        #ui-overlay { position: absolute; top: 20px; left: 20px; color: white; z-index: 20; text-shadow: 0 2px 4px rgba(0,0,0,0.5); pointer-events: none; }
-        #ui-overlay * { pointer-events: auto; }
+
+        /* Floating UI Controls */
+        #ui-controls { 
+            position: absolute; 
+            bottom: 30px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            display: flex; 
+            gap: 15px; 
+            z-index: 20; 
+        }
+
+        .icon-btn { 
+            width: 50px; 
+            height: 50px; 
+            background: rgba(255, 255, 255, 0.1); 
+            backdrop-filter: blur(10px); 
+            border: 1px solid rgba(255, 255, 255, 0.2); 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 1.2rem; 
+            cursor: pointer; 
+            transition: all 0.3s;
+            color: white;
+        }
+        .icon-btn:hover { background: var(--accent-bg); border-color: var(--accent-color); transform: scale(1.1); }
         
-        .gesture-badge { background: rgba(0,0,0,0.4); padding: 10px 18px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(8px); margin-bottom: 12px; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); font-size: 0.9rem; width: fit-content; pointer-events: none; }
-        .active-gesture { border-color: var(--accent-color); box-shadow: 0 0 20px var(--accent-glow); background: var(--accent-bg); transform: translateX(10px); color: var(--accent-color); }
-        
-        #loading { position: fixed; inset: 0; background: radial-gradient(circle, #1a1a1a 0%, #000 100%); display: flex; align-items: center; justify-content: center; color: var(--accent-color); z-index: 100; flex-direction: column; }
-        .spinner { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid var(--accent-color); border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 25px; }
+        /* Menu & Instructions Overlay */
+        #menu-toggle { 
+            position: absolute; 
+            top: 20px; 
+            right: 20px; 
+            z-index: 100; 
+        }
+
+        #instructions-overlay { 
+            position: fixed; 
+            top: 0; 
+            right: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0, 0, 0, 0.9); 
+            z-index: 90; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            pointer-events: none; 
+            /* Top-right to Bottom-left Circle Clip Animation */
+            clip-path: circle(0% at 95% 5%);
+            transition: clip-path 0.7s cubic-bezier(0.77, 0, 0.175, 1);
+        }
+
+        #instructions-overlay.open { 
+            clip-path: circle(150% at 95% 5%); 
+            pointer-events: auto; 
+        }
+
+        .instruction-card { 
+            padding: 2rem; 
+            max-width: 400px; 
+            text-align: center; 
+            color: white;
+        }
+
+        .gesture-item { 
+            background: rgba(255,255,255,0.05); 
+            padding: 12px; 
+            border-radius: 12px; 
+            margin-bottom: 10px; 
+            display: flex; 
+            align-items: center; 
+            gap: 15px;
+            font-size: 0.9rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* Loading */
+        #loading { position: fixed; inset: 0; background: #050505; display: flex; align-items: center; justify-content: center; z-index: 1000; flex-direction: column; }
+        .spinner { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid var(--accent-color); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        .ui-hidden { opacity: 0; transform: translateX(-20px); pointer-events: none; }
-        .action-btn { pointer-events: auto; cursor: pointer; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); padding: 8px 20px; border-radius: 20px; font-size: 0.85rem; margin-bottom: 15px; transition: all 0.3s; color: #fff; display: flex; align-items: center; gap: 10px; }
-        .action-btn:hover { background: var(--accent-bg); border-color: var(--accent-color); transform: translateY(-2px); }
+
         input[type="file"] { display: none; }
-        
+
         :root {
             --accent-color: #ffb6c1;
             --accent-glow: rgba(255,182,193,0.4);
             --accent-bg: rgba(255,182,193,0.15);
-        }
-        .christmas-theme {
-            --accent-color: #ff3e3e;
-            --accent-glow: rgba(255,62,62,0.4);
-            --accent-bg: rgba(255,62,62,0.15);
-        }
-        .newyear-theme {
-            --accent-color: #ffd700;
-            --accent-glow: rgba(255,215,0,0.4);
-            --accent-bg: rgba(255,215,0,0.15);
         }
     </style>
 </head>
@@ -49,92 +125,87 @@
 
     <div id="loading">
         <div class="spinner"></div>
-        <p id="loading-text" class="tracking-widest">Initializing system...</p>
+        <p class="text-white/50 tracking-widest text-xs uppercase">Initializing Gallery...</p>
     </div>
 
-    <div id="ui-overlay">
-        <h1 id="gallery-title" class="text-4xl font-extralight mb-6 tracking-[0.3em] opacity-80">ETHEREAL GALLERY</h1>
-        
-        <div class="flex flex-col gap-2 mb-8">
-            <button id="ui-toggle-btn" class="action-btn w-fit">👁️ Toggle UI</button>
-            <label for="image-upload" class="action-btn w-fit">
-                🖼️ Select Images
-            </label>
-            <input type="file" id="image-upload" multiple accept="image/*">
-        </div>
+    <!-- Header Title -->
+    <div class="absolute top-6 left-6 z-20 pointer-events-none">
+        <h1 id="gallery-title" class="text-xl md:text-2xl font-extralight tracking-[0.2em] text-white opacity-60">ETHEREAL</h1>
+    </div>
 
-        <div id="instruction-container">
-            <div id="badge-scroll" class="gesture-badge">👆 Point and move to scroll images</div>
-            <div id="badge-rotate" class="gesture-badge">✋ Open palm and move left/right to rotate</div>
-            <div id="badge-select" class="gesture-badge">🤌 Pinch to select/deselect image</div>
-            <div id="badge-fist" class="gesture-badge">✊ Make fist to turn into paper fragments</div>
-            <div id="badge-zoom" class="gesture-badge">↕️ Move hand forward/backward to zoom</div>
-            <div id="holiday-badge" class="mt-10 opacity-60 text-xs tracking-widest uppercase">SYSTEM READY</div>
+    <!-- Top Right Menu Button -->
+    <button id="menu-toggle" class="icon-btn" title="Instructions">
+        <span id="menu-icon">❔</span>
+    </button>
+
+    <!-- Instructions Overlay (Animation UI) -->
+    <div id="instructions-overlay">
+        <div class="instruction-card">
+            <h2 class="text-2xl mb-6 font-light tracking-widest">HAND GESTURES</h2>
+            <div id="instruction-list">
+                <div class="gesture-item"><span>👆</span> Point and move to scroll</div>
+                <div class="gesture-item"><span>✋</span> Open palm to rotate gallery</div>
+                <div class="gesture-item"><span>🤌</span> Pinch to focus image</div>
+                <div class="gesture-item"><span>✊</span> Fist to shatter images</div>
+                <div class="gesture-item"><span>↕️</span> Z-axis movement to zoom</div>
+            </div>
+            <button id="close-menu" class="mt-8 text-xs uppercase tracking-widest text-white/40 hover:text-white transition-colors underline">Close Menu</button>
         </div>
     </div>
 
+    <!-- Bottom Controls -->
+    <div id="ui-controls">
+        <button id="ui-visibility-btn" class="icon-btn" title="Toggle UI Labels">👁️</button>
+        <label for="image-upload" class="icon-btn" title="Select Images">
+            🖼️
+        </label>
+        <input type="file" id="image-upload" multiple accept="image/*">
+    </div>
+
+    <!-- Camera Feed -->
     <div id="video-container">
         <video id="input_video"></video>
     </div>
 
     <script>
-        const now = new Date();
-        const month = now.getMonth() + 1; 
-        const date = now.getDate();
-        
-        let themeType = "default";
-        if (month === 12 && date >= 24 && date <= 26) themeType = "christmas";
-        else if ((month === 12 && date >= 31) || (month === 1 && date <= 2)) themeType = "newyear";
+        // UI Logic
+        const menuBtn = document.getElementById('menu-toggle');
+        const overlay = document.getElementById('instructions-overlay');
+        const closeBtn = document.getElementById('close-menu');
+        const menuIcon = document.getElementById('menu-icon');
 
-        const galleryTitle = document.getElementById('gallery-title');
-        const holidayBadge = document.getElementById('holiday-badge');
-        const loadingText = document.getElementById('loading-text');
-
-        let accentHex = 0xffb6c1;
-        let confettiColors = [0xffb6c1, 0xffffff, 0xffd1dc];
-
-        if (themeType === "christmas") {
-            document.body.classList.add('christmas-theme');
-            galleryTitle.innerHTML = "🎅 MERRY <span class='text-red-500'>CHRISTMAS</span> 🎄";
-            holidayBadge.innerText = "✨ CHRISTMAS EDITION 🎁";
-            accentHex = 0xff3e3e;
-            confettiColors = [0xff3e3e, 0x2e8b57, 0xffffff];
-        } else if (themeType === "newyear") {
-            document.body.classList.add('newyear-theme');
-            galleryTitle.innerHTML = "✨ HAPPY <span class='text-yellow-400'>NEW YEAR</span> 🎆";
-            holidayBadge.innerText = "🥂 NEW YEAR EDITION 🎇";
-            accentHex = 0xffd700;
-            confettiColors = [0xffd700, 0xffffff, 0xc0c0c0];
-        }
-
-        let uiVisible = true;
-        document.getElementById('ui-toggle-btn').addEventListener('click', () => {
-            uiVisible = !uiVisible;
-            document.getElementById('instruction-container').classList.toggle('ui-hidden', !uiVisible);
+        menuBtn.addEventListener('click', () => {
+            const isOpen = overlay.classList.toggle('open');
+            menuIcon.innerText = isOpen ? '✕' : '❔';
         });
 
+        closeBtn.addEventListener('click', () => {
+            overlay.classList.remove('open');
+            menuIcon.innerText = '❔';
+        });
+
+        // Hide main text elements logic
+        const uiToggle = document.getElementById('ui-visibility-btn');
+        let uiLabelsHidden = false;
+        uiToggle.addEventListener('click', () => {
+            uiLabelsHidden = !uiLabelsHidden;
+            document.getElementById('gallery-title').style.opacity = uiLabelsHidden ? '0' : '0.6';
+            uiToggle.style.opacity = uiLabelsHidden ? '0.4' : '1';
+        });
+
+        // --- Three.js & Hand Tracking Core Logic (Modified for new UI) ---
+        
         const RADIUS = 20;
         let scene, camera, renderer, galleryGroup, particles;
-        let emojiSprites = []; 
         let images = [];
         let currentImageCount = 0;
-        
         let targetRotation = 0, currentRotation = 0;
         let targetZoom = 40, currentZoom = 40;
         let isFocusMode = false, focusedIndex = -1;
         let focusRotationY = 0, focusScale = 1;
         let lastHandPos = null, gestureCooldown = 0;
-        
         let isFistActive = false;
-
-        function createEmojiTexture(emoji) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 128; canvas.height = 128;
-            const ctx = canvas.getContext('2d');
-            ctx.font = '100px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText(emoji, 64, 64);
-            return new THREE.CanvasTexture(canvas);
-        }
+        let accentHex = 0xffb6c1;
 
         function initThree() {
             scene = new THREE.Scene();
@@ -145,7 +216,7 @@
 
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             document.body.appendChild(renderer.domElement);
 
             scene.add(new THREE.AmbientLight(0xffffff, 0.8));
@@ -156,26 +227,13 @@
             galleryGroup = new THREE.Group();
             scene.add(galleryGroup);
 
-            if (themeType !== "default") {
-                const holidayEmojis = themeType === "christmas" ? ['🎄', '🎁', '✨'] : ['🎆', '🎇', '✨', '🥂'];
-                const textures = holidayEmojis.map(e => createEmojiTexture(e));
-                for (let i = 0; i < 100; i++) {
-                    const material = new THREE.SpriteMaterial({ map: textures[i % textures.length], transparent: true, opacity: 0.8 });
-                    const sprite = new THREE.Sprite(material);
-                    sprite.position.set((Math.random()-0.5)*120, Math.random()*100-50, (Math.random()-0.5)*120);
-                    sprite.scale.set(1.5, 1.5, 1);
-                    sprite.userData = { velocity: 0.05 + Math.random()*0.1, drift: (Math.random()-0.5)*0.02 };
-                    scene.add(sprite);
-                    emojiSprites.push(sprite);
-                }
-            } else {
-                const pGeo = new THREE.BufferGeometry();
-                const pPos = new Float32Array(1500 * 3);
-                for(let i=0; i<1500*3; i++) pPos[i] = (Math.random() - 0.5) * 200;
-                pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-                particles = new THREE.Points(pGeo, new THREE.PointsMaterial({ color: 0xffb6c1, size: 0.1, transparent: true, opacity: 0.5 }));
-                scene.add(particles);
-            }
+            // Background particles
+            const pGeo = new THREE.BufferGeometry();
+            const pPos = new Float32Array(1000 * 3);
+            for(let i=0; i<1000*3; i++) pPos[i] = (Math.random() - 0.5) * 150;
+            pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+            particles = new THREE.Points(pGeo, new THREE.PointsMaterial({ color: accentHex, size: 0.05, transparent: true, opacity: 0.3 }));
+            scene.add(particles);
 
             window.addEventListener('resize', () => {
                 camera.aspect = window.innerWidth / window.innerHeight;
@@ -184,39 +242,20 @@
             });
         }
 
-        function createFragmentsForImage() {
-            const count = 40; 
-            const fragmentsGroup = new THREE.Group();
-            fragmentsGroup.visible = false; // Initial hidden
-            const fragments = [];
-            
+        function createFragments(color) {
+            const count = 30;
+            const group = new THREE.Group();
+            group.visible = false;
+            const list = [];
             for (let i = 0; i < count; i++) {
-                const w = 0.5 + Math.random() * 1.5;
-                const h = 0.5 + Math.random() * 1.5;
-                const geo = new THREE.PlaneGeometry(w, h);
-                const mat = new THREE.MeshStandardMaterial({ 
-                    color: confettiColors[i % confettiColors.length],
-                    side: THREE.DoubleSide,
-                    transparent: true,
-                    opacity: 0
-                });
-                
-                const piece = new THREE.Mesh(geo, mat);
-                const ox = (Math.random() - 0.5) * 8;
-                const oy = (Math.random() - 0.5) * 10;
-                piece.position.set(ox, oy, (Math.random()-0.5)*0.2);
-                
-                fragmentsGroup.add(piece);
-                fragments.push({
-                    mesh: piece,
-                    origPos: piece.position.clone(),
-                    origRot: piece.rotation.clone(),
-                    velocity: new THREE.Vector3((Math.random()-0.5)*0.5, (Math.random()-0.5)*0.5, (Math.random()-0.5)*0.5),
-                    rotVel: new THREE.Vector3(Math.random()*0.1, Math.random()*0.1, Math.random()*0.1)
-                });
+                const geo = new THREE.PlaneGeometry(0.8, 0.8);
+                const mat = new THREE.MeshStandardMaterial({ color: color, side: THREE.DoubleSide, transparent: true, opacity: 0 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set((Math.random()-0.5)*8, (Math.random()-0.5)*10, 0);
+                group.add(mesh);
+                list.push({ mesh, origPos: mesh.position.clone(), vel: new THREE.Vector3((Math.random()-0.5)*0.3, (Math.random()-0.5)*0.3, (Math.random()-0.5)*0.3) });
             }
-            
-            return { group: fragmentsGroup, list: fragments };
+            return { group, list };
         }
 
         function createGallery(urls) {
@@ -233,8 +272,8 @@
                 const frame = new THREE.Group();
                 frame.add(mesh);
                 
-                const fragments = createFragmentsForImage();
-                frame.add(fragments.group);
+                const frags = createFragments(accentHex);
+                frame.add(frags.group);
                 
                 const posX = Math.sin(angle) * RADIUS;
                 const posZ = Math.cos(angle) * RADIUS;
@@ -242,13 +281,7 @@
                 frame.lookAt(0, 0, 0);
                 
                 galleryGroup.add(frame);
-                images.push({ 
-                    group: frame, 
-                    mesh: mesh, 
-                    fragments: fragments,
-                    origPos: new THREE.Vector3(posX, 0, posZ), 
-                    origRot: frame.rotation.clone()
-                });
+                images.push({ group: frame, mesh, frags, origPos: new THREE.Vector3(posX, 0, posZ), origRot: frame.rotation.clone() });
             });
         }
 
@@ -265,7 +298,6 @@
         function onResults(results) {
             document.getElementById('loading').style.display = 'none';
             if (gestureCooldown > 0) gestureCooldown--;
-            document.querySelectorAll('.gesture-badge').forEach(b => b.classList.remove('active-gesture'));
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const hand = results.multiHandLandmarks[0];
@@ -274,46 +306,36 @@
                 const isFist = [8, 12, 16, 20].every(id => hand[id].y > hand[id-2].y);
                 isFistActive = isFist;
 
-                if (isFist) {
-                    document.getElementById('badge-fist').classList.add('active-gesture');
-                } else {
+                if (!isFist) {
                     const isPalmOpen = [8,12,16,20].every(id => Math.hypot(hand[id].x - palmBase.x, hand[id].y - palmBase.y) > 0.18);
                     const pinchDist = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
 
                     if (pinchDist < 0.04 && gestureCooldown === 0) {
                         isFocusMode = !isFocusMode;
-                        if (isFocusMode) { focusedIndex = activeIndex; focusRotationY = 0; focusScale = 1.8; }
+                        if (isFocusMode) { focusedIndex = activeIndex; focusRotationY = 0; focusScale = 1.6; }
                         gestureCooldown = 40;
-                        document.getElementById('badge-select').classList.add('active-gesture');
                     }
 
                     const handSize = Math.hypot(hand[5].x - hand[17].x, hand[5].y - hand[17].y);
                     if (!isFocusMode) {
                         if (lastHandPos) {
-                            const dx = indexTip.x - lastHandPos;
-                            targetRotation -= dx * (isPalmOpen ? 8 : 12);
-                            if (Math.abs(dx) > 0.01) document.getElementById(isPalmOpen ? 'badge-rotate' : 'badge-scroll').classList.add('active-gesture');
+                            targetRotation -= (indexTip.x - lastHandPos) * (isPalmOpen ? 8 : 12);
                         }
                         targetZoom = 55 - (handSize * 150);
                         targetZoom = Math.min(Math.max(targetZoom, 20), 70);
-                        document.getElementById('badge-zoom').classList.add('active-gesture');
                     } else {
                         if (lastHandPos) focusRotationY += (indexTip.x - lastHandPos) * 5;
-                        focusScale = Math.min(Math.max(handSize * 12, 0.5), 4);
-                        document.getElementById('badge-zoom').classList.add('active-gesture');
+                        focusScale = Math.min(Math.max(handSize * 12, 0.5), 3);
                     }
                     lastHandPos = indexTip.x;
                 }
-            } else { 
-                lastHandPos = null; isFistActive = false;
-            }
+            } else { lastHandPos = null; isFistActive = false; }
         }
 
         let activeIndex = 0;
         function animate() {
             requestAnimationFrame(animate);
             const time = Date.now() * 0.001;
-
             currentRotation += (targetRotation - currentRotation) * 0.1;
             if (!isFocusMode) galleryGroup.rotation.y = currentRotation;
             currentZoom += (targetZoom - currentZoom) * 0.08;
@@ -325,70 +347,44 @@
 
                 images.forEach((img, i) => {
                     if (isFistActive) {
-                        // --- PAPER FRAGMENTS EFFECT ON ---
                         img.mesh.visible = false;
-                        img.fragments.group.visible = true; // Show group only when fist is active
-                        img.fragments.list.forEach(f => {
-                            f.mesh.material.opacity += (0.9 - f.mesh.material.opacity) * 0.1;
-                            f.mesh.position.add(f.velocity);
-                            f.mesh.rotation.x += f.rotVel.x;
-                            f.mesh.rotation.y += f.rotVel.y;
-                            f.mesh.position.y -= 0.02; 
+                        img.frags.group.visible = true;
+                        img.frags.list.forEach(f => {
+                            f.mesh.material.opacity += (0.8 - f.mesh.material.opacity) * 0.1;
+                            f.mesh.position.add(f.vel);
+                            f.mesh.position.y -= 0.02;
                         });
                     } else {
-                        // --- RESET & STABILIZE ---
                         img.mesh.visible = true;
-                        
-                        let totalOpacity = 0;
-                        img.fragments.list.forEach(f => {
-                            f.mesh.material.opacity += (0 - f.mesh.material.opacity) * 0.2;
-                            f.mesh.position.lerp(f.origPos, 0.2);
-                            f.mesh.rotation.x += (f.origRot.x - f.mesh.rotation.x) * 0.2;
-                            f.mesh.rotation.y += (f.origRot.y - f.mesh.rotation.y) * 0.2;
-                            f.mesh.rotation.z += (f.origRot.z - f.mesh.rotation.z) * 0.2;
-                            totalOpacity += f.mesh.material.opacity;
+                        img.frags.list.forEach(f => {
+                            f.mesh.material.opacity *= 0.8;
+                            f.mesh.position.lerp(f.origPos, 0.1);
                         });
-
-                        // Hide group completely when pieces are faded out
-                        if (totalOpacity < 0.1) {
-                            img.fragments.group.visible = false;
-                        }
+                        if (img.frags.list[0].mesh.material.opacity < 0.01) img.frags.group.visible = false;
 
                         if (isFocusMode && i === focusedIndex) {
                             const worldTarget = new THREE.Vector3(0, 0, currentZoom - 12);
-                            const localTarget = galleryGroup.worldToLocal(worldTarget.clone());
-                            img.group.position.lerp(localTarget, 0.1);
+                            img.group.position.lerp(galleryGroup.worldToLocal(worldTarget), 0.1);
                             img.group.rotation.y = -galleryGroup.rotation.y + focusRotationY;
                             img.mesh.scale.lerp(new THREE.Vector3(focusScale, focusScale, 1), 0.1);
-                            img.mesh.material.opacity = 1.0;
+                            img.mesh.material.opacity = 1;
                         } else {
                             img.group.position.lerp(img.origPos, 0.1);
                             img.group.rotation.y += (img.origRot.y - img.group.rotation.y) * 0.1;
-                            img.group.position.y = Math.sin(time + i) * 0.3;
-                            img.mesh.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
+                            img.mesh.scale.lerp(new THREE.Vector3(1,1,1), 0.1);
                             img.mesh.material.opacity += ((isFocusMode ? 0.1 : 1.0) - img.mesh.material.opacity) * 0.1;
                         }
                     }
                 });
             }
-
-            if (themeType !== "default") {
-                emojiSprites.forEach(sprite => {
-                    sprite.position.y -= sprite.userData.velocity;
-                    sprite.position.x += Math.sin(time + sprite.position.y) * sprite.userData.drift;
-                    if (sprite.position.y < -50) sprite.position.y = 50;
-                });
-            } else if (particles) {
-                particles.rotation.y += 0.0003;
-            }
-
+            if (particles) particles.rotation.y += 0.0003;
             renderer.render(scene, camera);
         }
 
         window.onload = () => {
             initThree();
             animate();
-            const defaults = Array.from({length: 6}, (_, i) => `https://picsum.photos/seed/${i+999}/800/1000`);
+            const defaults = Array.from({length: 6}, (_, i) => `https://picsum.photos/seed/${i+123}/800/1000`);
             createGallery(defaults);
 
             const video = document.getElementById('input_video');
