@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="my">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,7 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #050505; font-family: 'Pyidaungsu', sans-serif; }
+        body { margin: 0; overflow: hidden; background: #050505; font-family: sans-serif; }
         #video-container { position: absolute; bottom: 20px; right: 20px; width: 180px; height: 135px; border-radius: 12px; overflow: hidden; border: 2px solid rgba(255,255,255,0.2); z-index: 10; transform: scaleX(-1); }
         #input_video { width: 100%; height: 100%; object-fit: cover; }
         #ui-overlay { position: absolute; top: 20px; left: 20px; color: white; z-index: 20; text-shadow: 0 2px 4px rgba(0,0,0,0.5); pointer-events: none; }
@@ -49,26 +49,26 @@
 
     <div id="loading">
         <div class="spinner"></div>
-        <p id="loading-text" class="tracking-widest">စနစ်ကို ပြင်ဆင်နေသည်...</p>
+        <p id="loading-text" class="tracking-widest">Initializing system...</p>
     </div>
 
     <div id="ui-overlay">
         <h1 id="gallery-title" class="text-4xl font-extralight mb-6 tracking-[0.3em] opacity-80">ETHEREAL GALLERY</h1>
         
         <div class="flex flex-col gap-2 mb-8">
-            <button id="ui-toggle-btn" class="action-btn w-fit">👁️ UI ဖျောက်ရန်/ပြရန်</button>
+            <button id="ui-toggle-btn" class="action-btn w-fit">👁️ Toggle UI</button>
             <label for="image-upload" class="action-btn w-fit">
-                🖼️ ပုံများ ရွေးချယ်ရန်
+                🖼️ Select Images
             </label>
             <input type="file" id="image-upload" multiple accept="image/*">
         </div>
 
         <div id="instruction-container">
-            <div id="badge-scroll" class="gesture-badge">👆 လက်ညှိးဝှေ့ယမ်း၍ ပုံများကို ရွှေ့ပါ</div>
-            <div id="badge-rotate" class="gesture-badge">✋ လက်ဝါးဖြန့်ကာ ဘယ်/ညာ ရွှေ့၍ လှည့်ပါ</div>
-            <div id="badge-select" class="gesture-badge">🤌 လက်ညှိးနှင့်လက်မထိ၍ ပုံကို ဆွဲထုတ်ပါ/ပြန်ထားပါ</div>
-            <div id="badge-fist" class="gesture-badge">✊ လက်သီးဆုပ်ပြ၍ စက္ကူအပိုင်းအစများအဖြစ် ကြေမွစေပါ</div>
-            <div id="badge-zoom" class="gesture-badge">↕️ လက်ကို ရှေ့တိုး/နောက်ဆုတ်လုပ်၍ Zoom ဆွဲပါ</div>
+            <div id="badge-scroll" class="gesture-badge">👆 Point and move to scroll images</div>
+            <div id="badge-rotate" class="gesture-badge">✋ Open palm and move left/right to rotate</div>
+            <div id="badge-select" class="gesture-badge">🤌 Pinch to select/deselect image</div>
+            <div id="badge-fist" class="gesture-badge">✊ Make fist to turn into paper fragments</div>
+            <div id="badge-zoom" class="gesture-badge">↕️ Move hand forward/backward to zoom</div>
             <div id="holiday-badge" class="mt-10 opacity-60 text-xs tracking-widest uppercase">SYSTEM READY</div>
         </div>
     </div>
